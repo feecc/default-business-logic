@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  business_logic:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    command: uvicorn app:app --host 0.0.0.0 --port 8001
+    environment:
+      VIDEO_PATH: "./vids"  # Folder where video files will be saved
+
+      IPFS_GATEWAY_URI: "Sample"
+      IPFS_LINK: "http://sample/ipfs/"
+      CAMERA_OVERVIEW_VID_START: "https://Sample"
+      CAMERA_OVERVIEW_VID_STOP: "https://Sample"
+    ports:
+      - "8001:8001"
+#    volumes:
+#      - /csvs:/csvs:ro
+
