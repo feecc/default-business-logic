@@ -1,4 +1,5 @@
 import os
+import pathlib
 
 import requests
 from fastapi import FastAPI, HTTPException, status, Response
@@ -6,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from loguru import logger
 from pydantic import BaseModel
+from uuid import uuid4
 
 from config import settings
 
@@ -40,20 +42,23 @@ def start_record():
 def stop_record():
     try:
         file_response: FileResponse = requests.get(settings.camera_overview_vid_stop)
-
+        filename = uuid4().hex
+        video_path = pathlib.Path(f"{settings.video_path}/{filename}.mp4")
         if not os.path.isdir(settings.video_path):
             os.mkdir(settings.video_path)
-        with open(f"{settings.video_path}/{file_response.path}", "wb") as f:
+        with open(video_path, "wb") as f:
             f.write(file_response.content)
-        video_path = os.path.abspath(f"{settings.video_path}/{file_response.path}")
 
         if not settings.ipfs_gateway_uri:
             raise ValueError("IPFS_GATEWAY_URI not provided")
-
-        response = requests.post(settings.ipfs_gateway_uri, files={"file_data": open(video_path, "rb")})
-        basic_response = BaseModel(cid=response.json()["ipfs_cid"], ipfs_link=response.json()["ipfs_link"])
-        os.remove(video_path)  # Delete3 video file so it doesn't take space
-        return basic_response
+        with open(video_path, 'rb') as f:
+            response = requests.post(f"{settings.ipfs_gateway_uri}publish-to-ipfs/upload-file", files={"file_data": f})
+            if response.status_code != 200:
+                message = f"Could not post to IPFS. Status code: {response.status_code}; details: {response.json()}"
+                logger.error(message)
+                return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=message)
+            basic_response = {"ipfs_cid": response.json()["ipfs_cid"], "ipfs_link": response.json()["ipfs_link"]}
+            return basic_response
     except Exception as e:
         logger.error("Could not stop the recording process.")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
